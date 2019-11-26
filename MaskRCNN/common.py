@@ -6,7 +6,7 @@
 import numpy as np
 import cv2
 
-from tensorpack_dataflow import RNGDataFlow, transform
+from tensorpack_dataflow import RNGDataFlow
 import tensorpack_transform as transform
 
 
