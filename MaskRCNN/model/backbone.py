@@ -7,10 +7,8 @@ import numpy as np
 from contextlib import ExitStack, contextmanager, suppress
 import tensorflow as tf
 
-from tensorpack.models import BatchNorm, Conv2D, MaxPooling, layer_register
-from tensorpack.tfutils import argscope
-from tensorpack.tfutils.scope_utils import auto_reuse_variable_scope
-from tensorpack.tfutils.varreplace import custom_getter_scope, freeze_variables
+from tensorpack_models import BatchNorm, Conv2D, MaxPooling, layer_register
+from tensorpack_tfutils import argscope, auto_reuse_variable_scope, custom_getter_scope, freeze_variables
 
 from config import config as cfg
 from utils.mixed_precision import mixed_precision_scope

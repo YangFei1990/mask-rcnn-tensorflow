@@ -7,7 +7,7 @@ import numpy as np
 from collections import namedtuple
 import tensorflow as tf
 
-from tensorpack.tfutils.scope_utils import under_name_scope
+from tensorpack_tfutils import under_name_scope
 
 from config import config
 
@@ -16,12 +16,12 @@ def clip_boxes_batch(boxes, window, batch_ids, name=None):
     """
     Args:
         boxes: nx(#class)x4, xyxy
-        window: BSx2 
+        window: BSx2
         batch_ids: 1-D Tensor of size n
     """
     boxes = tf.maximum(boxes, 0.0)
 
-    wh = tf.reverse(tf.gather(window, batch_ids), axis=[1]) 
+    wh = tf.reverse(tf.gather(window, batch_ids), axis=[1])
     whwh = tf.concat((wh, wh), axis=1)
 
     multiples = tf.stack([tf.constant(1), tf.shape(boxes)[1], tf.constant(1)])

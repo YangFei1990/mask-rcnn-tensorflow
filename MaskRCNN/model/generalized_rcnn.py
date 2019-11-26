@@ -5,9 +5,9 @@ assert six.PY3, "FasterRCNN requires Python 3!"
 import tensorflow as tf
 import math
 
-from tensorpack import *
-from tensorpack.tfutils import optimizer
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack_tfutils import add_moving_summary, get_current_tower_context
+from tensorpack_models import regularize_cost
+from tensorpack_graph_builder import ModelDesc
 
 from model import mask_head, boxclass_head
 from model.backbone import image_preprocess, resnet_fpn_backbone
@@ -117,7 +117,7 @@ class DetectionModel(ModelDesc):
         head_losses = self.roi_heads(image, features, proposal_boxes, targets, inputs, seed_gen)
 
         if self.training:
-            wd_cost = regularize_cost('.*/W', l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
+            wd_cost = regularize_cost('.*/W', tf.contrib.layers.l2_regularizer(cfg.TRAIN.WEIGHT_DECAY), name='wd_cost')
             total_cost = tf.add_n(rpn_losses + head_losses + [wd_cost], 'total_cost')
             #total_cost = print_runtime_tensor('COST ', total_cost, prefix=f'rank{hvd.rank()}')
             add_moving_summary(total_cost, wd_cost)

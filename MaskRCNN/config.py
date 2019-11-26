@@ -8,8 +8,8 @@ import os
 import six
 import pprint
 
-from tensorpack.utils import logger
-from tensorpack.utils.gpu import get_num_gpu
+import tensorpack_logger as logger
+from tensorpack_utils import get_num_gpu
 
 __all__ = ['config', 'finalize_configs']
 

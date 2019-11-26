@@ -3,8 +3,8 @@
 import tensorflow as tf
 
 from config import config as cfg
-from tensorpack.tfutils.scope_utils import under_name_scope
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack_tfutils import under_name_scope, add_moving_summary
+
 from utils.box_ops import pairwise_iou_batch
 
 

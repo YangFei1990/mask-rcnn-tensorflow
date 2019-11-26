@@ -3,17 +3,18 @@
 # -*- coding: utf-8 -*-
 # File: data.py
 
-from tensorpack.dataflow import RNGDataFlow
+from tensorpack_dataflow import RNGDataFlow
 import copy
 import numpy as np
 import cv2
 from tabulate import tabulate
 from termcolor import colored
 
-from tensorpack.dataflow import (
-    DataFromList, MapDataComponent, MultiProcessMapDataZMQ, MultiThreadMapData, TestDataSpeed, imgaug, MapData)
-from tensorpack.utils import logger
-from tensorpack.utils.argtools import log_once, memoized
+from tensorpack_dataflow import DataFromList, MapDataComponent, MultiProcessMapDataZMQ, \
+                                MultiThreadMapData, TestDataSpeed, MapData, \
+                                AugmentorList, Flip
+from tensorpack_utils import log_once, memoized
+import tensorpack_logger as logger
 
 from common import (
     CustomResize, DataFromListOfDict, box_to_point8,
@@ -24,7 +25,6 @@ from utils.generate_anchors import generate_anchors
 from utils.np_box_ops import area as np_area, ioa as np_ioa
 
 import math
-# import tensorpack.utils.viz as tpviz
 
 """
 Predefined padding:
@@ -397,9 +397,9 @@ def get_train_dataflow():
 
     ds = DataFromList(roidbs, shuffle=True)
 
-    aug = imgaug.AugmentorList(
+    aug = AugmentorList(
         [CustomResize(cfg.PREPROC.TRAIN_SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE),
-         imgaug.Flip(horiz=True)])
+         Flip(horiz=True)])
 
     def preprocess(roidb):
         fname, boxes, klass, is_crowd = roidb['file_name'], roidb['boxes'], roidb['class'], roidb['is_crowd']
@@ -506,9 +506,9 @@ def get_viz_dataflow(name):
 
     ds = DataFromList(roidbs, shuffle=True)
 
-    aug = imgaug.AugmentorList(
+    aug = AugmentorList(
         [CustomResize(cfg.PREPROC.TRAIN_SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE),
-         imgaug.Flip(horiz=True)])
+         Flip(horiz=True)])
 
     def preprocess(roidb):
         fname, boxes, klass, is_crowd = roidb['file_name'], roidb['boxes'], roidb['class'], roidb['is_crowd']
@@ -660,9 +660,9 @@ def get_batch_train_dataflow(batch_size):
     #   - TODO: Fix lack of batch contents shuffling
 
 
-    aug = imgaug.AugmentorList(
+    aug = AugmentorList(
          [CustomResize(cfg.PREPROC.TRAIN_SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE),
-          imgaug.Flip(horiz=True)])
+          Flip(horiz=True)])
 
     # aug = imgaug.AugmentorList([CustomResize(cfg.PREPROC.TRAIN_SHORT_EDGE_SIZE, cfg.PREPROC.MAX_SIZE)])
 
@@ -933,7 +933,6 @@ def get_batched_eval_dataflow(name, shard=0, num_shards=1, batch_size=1):
 
 if __name__ == '__main__':
     import os
-    from tensorpack.dataflow import PrintData
     cfg.DATA.BASEDIR = os.path.expanduser('~/data')
     ds = get_batched_eval_dataflow('train_reduced')
     ds.reset_state()

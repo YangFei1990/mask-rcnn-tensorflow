@@ -67,7 +67,10 @@ class ProgressBar(Callback):
         self._total = self.trainer.steps_per_epoch
         self._tqdm_args = get_tqdm_kwargs(leave=True)
 
-        self._fetches = self.get_tensors_maybe_in_tower(self._names) or None
+        if self._names:
+            self._fetches = self.get_tensors_maybe_in_tower(self._names)
+        else:
+            self._fetches =  None
         if self._fetches:
             for t in self._fetches:
                 assert t.shape.ndims == 0, "ProgressBar can only print scalars, not {}".format(t)
@@ -131,7 +134,7 @@ class MaintainStepCounter(Callback):
 
     def _after_run(self, _, __):
         # Keep python-side global_step in agreement with TF-side
-        self.trainer.loop._global_step += 1
+        self.trainer._global_step += 1
 
 
 class SessionRunTimeout(Callback):

@@ -114,8 +114,8 @@ class TrainConfig(object):
         self.dataflow = dataflow
         self.data = data
 
-        if model is not None:
-            assert_type(model, ModelDescBase, 'model')
+        #if model is not None:
+        #    assert_type(model, ModelDescBase, 'model')
         self.model = model
 
         if callbacks is not None:

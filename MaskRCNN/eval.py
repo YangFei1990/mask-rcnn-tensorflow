@@ -18,10 +18,10 @@ import tqdm
 import tensorflow as tf
 from scipy import interpolate
 
-from tensorpack.callbacks import Callback
-from tensorpack.tfutils.common import get_tf_version_tuple
-from tensorpack.utils import logger
-from tensorpack.utils.utils import get_tqdm
+from tensorpack_callbacks import Callback
+from tensorpack_tfutils import get_tf_version_tuple, TrainContext
+import tensorpack_logger as logger
+from tensorpack_utils import get_tqdm
 
 from common import CustomResize, clip_boxes
 from data import get_eval_dataflow, get_batched_eval_dataflow
@@ -347,92 +347,76 @@ class AsyncEvaluator():
         else:
             return False
 
+class OnlinePredictor(object):
+    """ A predictor which directly use an existing session and given tensors.
+    """
+
+    ACCEPT_OPTIONS = False
+    """ See Session.make_callable """
+
+    sess = None
+    """
+    The tf.Session object associated with this predictor.
+    """
+
+    def __init__(self, input_tensors, output_tensors,
+                 return_input=False, sess=None):
+        """
+        Args:
+            input_tensors (list): list of names.
+            output_tensors (list): list of names.
+            return_input (bool): same as :attr:`PredictorBase.return_input`.
+            sess (tf.Session): the session this predictor runs in. If None,
+                will use the default session at the first call.
+                Note that in TensorFlow, default session is thread-local.
+        """
+        self.return_input = return_input
+        self.input_tensors = input_tensors
+        self.output_tensors = output_tensors
+        self.sess = sess
+
+        if sess is not None:
+            self._callable = sess.make_callable(
+                fetches=output_tensors,
+                feed_list=input_tensors,
+                accept_options=self.ACCEPT_OPTIONS)
+        else:
+            self._callable = None
+
+    def __call__(self, *dp):
+        """
+        Call the predictor on some inputs.
+
+        Example:
+            When you have a predictor defined with two inputs, call it with:
+
+            .. code-block:: python
+
+                predictor(e1, e2)
+        """
+        output = self._do_call(dp)
+        if self.return_input:
+            return (dp, output)
+        else:
+            return output
+
+    def _do_call(self, dp):
+        assert len(dp) == len(self.input_tensors), \
+            "{} != {}".format(len(dp), len(self.input_tensors))
+        if self.sess is None:
+            self.sess = tf.get_default_session()
+            assert self.sess is not None, "Predictor isn't called under a default session!"
+
+        if self._callable is None:
+            self._callable = self.sess.make_callable(
+                fetches=self.output_tensors,
+                feed_list=self.input_tensors,
+                accept_options=self.ACCEPT_OPTIONS)
+        # run_metadata = tf.RunMetadata()
+        # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+        return self._callable(*dp)
 
 class EvalCallback(Callback):
-    """
-    A callback that runs evaluation once a while.
-    It supports multi-gpu evaluation.
-    """
-
-    _chief_only = False
-
-    def __init__(self, eval_dataset, in_names, out_names, output_dir, batch_size):
-        self._eval_dataset = eval_dataset
-        self._in_names, self._out_names = in_names, out_names
-        self._output_dir = output_dir
-        self.batched = batch_size > 0
-        self.batch_size = batch_size
-
-    def _setup_graph(self):
-        num_gpu = cfg.TRAIN.NUM_GPUS
-        if cfg.TRAINER == 'replicated':
-            # TF bug in version 1.11, 1.12: https://github.com/tensorflow/tensorflow/issues/22750
-            buggy_tf = get_tf_version_tuple() in [(1, 11), (1, 12)]
-
-            # Use two predictor threads per GPU to get better throughput
-            self.num_predictor = num_gpu if buggy_tf else num_gpu * 2
-            self.predictors = [self._build_predictor(k % num_gpu) for k in range(self.num_predictor)]
-            self.dataflows = [get_eval_dataflow(self._eval_dataset,
-                                                shard=k, num_shards=self.num_predictor)
-                              for k in range(self.num_predictor)]
-        else:
-            # Eval on all ranks and use gather
-            self.predictor = self._build_predictor(0)
-
-            if self.batched:
-                self.dataflow = get_batched_eval_dataflow(self._eval_dataset,
-                                              shard=hvd.rank(), num_shards=hvd.size(), batch_size=self.batch_size)
-            else:
-                self.dataflow = get_eval_dataflow(self._eval_dataset,
-                                              shard=hvd.rank(), num_shards=hvd.size())
-
-
-    def _build_predictor(self, idx):
-        return self.trainer.get_predictor(self._in_names, self._out_names, device=idx)
-
-    def _before_train(self):
-        eval_period = cfg.TRAIN.EVAL_PERIOD
-        self.epochs_to_eval = set()
-        for k in itertools.count(1):
-            if k * eval_period > self.trainer.max_epoch:
-                break
-            self.epochs_to_eval.add(k * eval_period)
-        self.epochs_to_eval.add(self.trainer.max_epoch)
-        logger.info("[EvalCallback] Will evaluate every {} epochs".format(eval_period))
-
-    def _eval(self):
-        logdir = self._output_dir
-        if cfg.TRAINER == 'replicated':
-            all_results = multithread_predict_dataflow(self.dataflows, self.predictors)
-        else:
-            if self.batched:
-                local_results = predict_dataflow_batch(self.dataflow, self.predictor)
-            else:
-                local_results = predict_dataflow(self.dataflow, self.predictor)
-
-            results = gather_result_from_all_processes(local_results)
-            if hvd.rank() > 0:
-                return
-            all_results = []
-            for item in results:
-                if item is not None:
-                    all_results.extend(item)
-
-        output_file = os.path.join(
-            logdir, '{}-outputs{}'.format(self._eval_dataset, self.global_step))
-
-        scores = DetectionDataset().eval_or_save_inference_results(
-            all_results, self._eval_dataset, output_file)
-        for k, v in scores.items():
-            self.trainer.monitors.put_scalar(k, v)
-
-    def _trigger_epoch(self):
-        if self.epoch_num in self.epochs_to_eval:
-            logger.info("Running evaluation ...")
-            self._eval()
-
-
-class AsyncEvalCallback(Callback):
     """
     A callback that runs evaluation once a while.
     It supports multi-gpu evaluation.
@@ -443,13 +427,16 @@ class AsyncEvalCallback(Callback):
     """
 
     _chief_only = False
+    build_graph_func = None
+    inputs_desc = None
 
-    def __init__(self, eval_dataset, in_names, out_names, output_dir, batch_size):
+    def __init__(self, eval_dataset, in_names, out_names, output_dir, batch_size, async=False):
         self._eval_dataset = eval_dataset
         self._in_names, self._out_names = in_names, out_names
         self._output_dir = output_dir
         self.batched = batch_size > 0
         self.batch_size = batch_size
+        self.async = async
 
     def _setup_graph(self):
         num_gpu = cfg.TRAIN.NUM_GPUS
@@ -476,10 +463,31 @@ class AsyncEvalCallback(Callback):
 
 
     def _build_predictor(self, idx):
-        return self.trainer.get_predictor(self._in_names, self._out_names, device=idx)
+        return self.get_predictor(self._in_names, self._out_names, device=idx)
+
+    def get_predictor(self, input_names, output_names, device=0):
+        pred_name = 'pred-{}'.format(device) if device >= 0 else 'tower-pred-cpu'
+        device_id = device
+        device = '/gpu:{}'.format(device_id) if device_id >= 0 else '/cpu:0'
+
+        def get_tensor(name):
+            name_with_ns = pred_name + "/" + name + ":0"
+            G = tf.get_default_graph()
+            return G.get_tensor_by_name(name_with_ns)
+
+        input_tensors = [v.build_placeholder_reuse() for v in self.inputs_desc]
+        input_tensor_names = {x.name: y for x, y in zip(self.inputs_desc, input_tensors)}
+        with tf.variable_scope(tf.get_variable_scope(), reuse=True), tf.device(device), \
+               TrainContext(pred_name, is_training=False):
+            logger.info("Building pred graph on device {}...".format(device))
+            self.build_graph_func(*input_tensors)
+        eval_input_tensors = [input_tensor_names[x] for x in input_names]
+        eval_output_tensors = [get_tensor(name) for name in output_names]
+        predictor = OnlinePredictor(eval_input_tensors, eval_output_tensors)
+        return predictor
 
     def _before_train(self):
-        if hvd.rank() == 0:
+        if hvd.rank() == 0 and self.async:
             self.worker = AsyncEvaluator()
         eval_period = cfg.TRAIN.EVAL_PERIOD
         self.epochs_to_eval = set()
@@ -508,17 +516,26 @@ class AsyncEvalCallback(Callback):
                 if item is not None:
                     all_results.extend(item)
 
-        def background_coco(all_results):
+        if self.async:
+            # define the async eval task
+            def background_coco(all_results):
+                output_file = os.path.join(
+                    logdir, '{}-outputs{}'.format(self._eval_dataset, self.global_step))
+                scores = DetectionDataset().eval_or_save_inference_results(
+                    all_results, self._eval_dataset, output_file)
+                cfg.TRAIN.SHOULD_STOP = scores['mAP(bbox)/IoU=0.5:0.95'] >= cfg.TEST.BOX_TARGET and scores['mAP(segm)/IoU=0.5:0.95'] >= cfg.TEST.MASK_TARGET
+                for k, v in scores.items():
+                    self.trainer.monitors.put_scalar(k, v)
+                return
+
+            self.worker.submit_task(f"eval_{self.epoch_num}", background_coco, all_results)
+        else:
             output_file = os.path.join(
                 logdir, '{}-outputs{}'.format(self._eval_dataset, self.global_step))
             scores = DetectionDataset().eval_or_save_inference_results(
                 all_results, self._eval_dataset, output_file)
-            cfg.TRAIN.SHOULD_STOP = scores['mAP(bbox)/IoU=0.5:0.95'] >= cfg.TEST.BOX_TARGET and scores['mAP(segm)/IoU=0.5:0.95'] >= cfg.TEST.MASK_TARGET
             for k, v in scores.items():
                 self.trainer.monitors.put_scalar(k, v)
-            return
-
-        self.worker.submit_task(f"eval_{self.epoch_num}", background_coco, all_results)
 
     def _trigger_epoch(self):
         if self.epoch_num in self.epochs_to_eval:

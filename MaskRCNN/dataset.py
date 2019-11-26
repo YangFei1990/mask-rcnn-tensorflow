@@ -11,8 +11,8 @@ try:
 except ImportError:
     import json
 
-from tensorpack.utils import logger
-from tensorpack.utils.timer import timed_operation
+import tensorpack_logger as logger
+from tensorpack_utils import timed_operation
 
 from config import config as cfg
 
@@ -248,7 +248,7 @@ class DetectionDataset(object):
             id (str): an id for the image. The inference results will be stored with this id.
         """
         return COCODetection.load_many(cfg.DATA.BASEDIR, name, add_gt=False)
-    
+
     def load_viz_roidbs(self, name):
         """
         Args:

@@ -1,6 +1,6 @@
 # Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-import tensorpack
+from tensorpack_callbacks import Callback
 import time
 import tensorflow as tf
 
@@ -112,7 +112,7 @@ def print_runtime_tensor_loose_branch(name, tensor, prefix=None, summarize=-1, t
 
 
 
-class ThroughputTracker(tensorpack.Callback):
+class ThroughputTracker(Callback):
     """
     Calculate and display throughput of model, by keeping track of the duration of each step and each epoch. Saves and
     outputs throughput as items/second. Prints output and saves

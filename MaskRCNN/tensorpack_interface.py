@@ -7,17 +7,17 @@ import tensorflow as tf
 import os
 import sys
 import time
+from datetime import timedelta
 
-from ..utils import logger
-from ..callbacks import Callback, Callbacks, Monitors, MonitorBase
-from ..callbacks.steps import MaintainStepCounter
-from ..tfutils.sessinit import JustCurrentSession, SessionInit
-from ..utils.utils import humanize_time_delta
-from .config import DEFAULT_MONITORS, TrainConfig
-from ..tfutils import get_global_step_var
-from ..tfutils.tower import get_current_tower_context, TrainTowerContext
-from ..tfutils.gradproc import FilterNoneGrad
+import tensorpack_logger as logger
+from tensorpack_callbacks import Callback, Callbacks, Monitors, MonitorBase, MaintainStepCounter
+from tensorpack_utils import humanize_time_delta
+from tensorpack_train import DEFAULT_MONITORS, TrainConfig
+from tensorpack_tfutils import FilterNoneGrad, JustCurrentSession
 from tabulate import tabulate
+from config import config as cfg
+
+from tensorpack_tfutils import get_current_tower_context, TrainContext, get_global_step_var
 
 import horovod.tensorflow as hvd
 
@@ -46,7 +46,7 @@ def _make_get_grad_fn(input, get_cost_fn, get_opt_fn, XLA_COMPILE=False):
                 return None     # this is the tower function, could be called for inference
 
             if ctx.has_own_variables:
-                varlist = ctx.get_collection_in_tower(tf.GraphKeys.TRAINABLE_VARIABLES)
+                varlist = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
             else:
                 varlist = tf.trainable_variables()
 
@@ -113,22 +113,6 @@ def allreduce(grads, compression=hvd.Compression.none, average=True):
             else:
                 averaged_gradients.append((None, var))
     return averaged_gradients
-
-class TrainContext(object):
-    class TrainTowerContext(object):
-        def __init__(self):
-            self.is_training = True
-            self.is_main_training_tower = True
-            self.has_own_variables = True
-
-    def __enter__(self):
-        import tensorpack as tp
-        tp.tfutils.tower._CurrentTowerContext = TrainContext.TrainTowerContext()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        import tensorpack as tp
-        tp.tfutils.tower._CurrentTowerContext = None
-        return False
 
 def register_callback(cb):
     is_chief = hvd.rank() == 0
@@ -400,7 +384,7 @@ def launch_train_with_config(config):
         launch_train_with_config(
             config, SyncMultiGPUTrainerParameterServer(8, ps_device='gpu'))
     """
-    assert isinstance(config, TrainConfig), config
+    #assert isinstance(config, TrainConfig), config
     assert config.model is not None
     assert config.dataflow is not None or config.data is not None
 
@@ -415,15 +399,16 @@ def launch_train_with_config(config):
     get_opt_fn = model.get_optimizer
 
     # Special treatment for the eval callback
-    config.callbacks[6].build_graph_func = _build_graph_get_cost
-    config.callbacks[6].inputs_desc = inputs_desc
+    if config.callbacks:
+        config.callbacks[6].build_graph_func = _build_graph_get_cost
+        config.callbacks[6].inputs_desc = inputs_desc
 
     # Setup inputs
     assert not input.setup_done()
     input_callbacks = input.setup(inputs_desc)
 
     # Setup graph
-    with TrainTowerContext(''):
+    with TrainContext(''):
         grads = _make_get_grad_fn(input, _build_graph_get_cost, get_opt_fn)()
         grads = allreduce(grads)
 
@@ -434,7 +419,10 @@ def launch_train_with_config(config):
 
     # Setup all callbacks
     loop = TrainLoop()
-    callbacks = input_callbacks + config.callbacks + config.extra_callbacks
+    if config.callbacks:
+        callbacks = input_callbacks + config.callbacks + config.extra_callbacks
+    else:
+        callbacks = input_callbacks
     callbacks.append(MaintainStepCounter())
     _callbacks = setup_callbacks(callbacks, DEFAULT_MONITORS(), loop)
 

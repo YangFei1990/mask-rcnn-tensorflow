@@ -6,10 +6,8 @@ import itertools
 import numpy as np
 import tensorflow as tf
 
-from tensorpack.models import Conv2D, FixedUnPooling, MaxPooling, layer_register
-from tensorpack.tfutils.argscope import argscope
-from tensorpack.tfutils.scope_utils import under_name_scope
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack_models import Conv2D, FixedUnPooling, MaxPooling, layer_register
+from tensorpack_tfutils import argscope, under_name_scope, add_moving_summary
 
 from model.backbone import GroupNorm
 from config import config as cfg

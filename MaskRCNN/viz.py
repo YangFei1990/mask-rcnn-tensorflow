@@ -6,8 +6,8 @@
 import numpy as np
 from six.moves import zip
 
-from tensorpack.utils import viz
-from tensorpack.utils.palette import PALETTE_RGB
+from tensorpack_utils import PALETTE_RGB
+import tensorpack_viz as viz
 
 from config import config as cfg
 from utils.np_box_ops import iou as np_iou

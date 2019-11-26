@@ -5,12 +5,9 @@
 
 import tensorflow as tf
 
-from tensorpack.models import Conv2D, FullyConnected, layer_register
-from tensorpack.tfutils.argscope import argscope
-from tensorpack.tfutils.common import get_tf_version_tuple
-from tensorpack.tfutils.scope_utils import under_name_scope
-from tensorpack.tfutils.summary import add_moving_summary
-from tensorpack.utils.argtools import memoized_method
+from tensorpack_models import Conv2D, FullyConnected, layer_register
+from tensorpack_tfutils import argscope, get_tf_version_tuple, under_name_scope, add_moving_summary
+from tensorpack_utils import memoized_method
 
 from model.backbone import GroupNorm
 from config import config as cfg

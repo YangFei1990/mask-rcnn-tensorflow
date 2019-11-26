@@ -4,11 +4,8 @@
 
 import tensorflow as tf
 
-from tensorpack import get_current_tower_context
-from tensorpack.models import Conv2D, layer_register
-from tensorpack.tfutils.argscope import argscope
-from tensorpack.tfutils.scope_utils import auto_reuse_variable_scope, under_name_scope
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack_models import Conv2D, layer_register
+from tensorpack_tfutils import argscope, get_current_tower_context, auto_reuse_variable_scope, under_name_scope, add_moving_summary, get_current_tower_context
 
 from config import config as cfg
 from model_box import clip_boxes

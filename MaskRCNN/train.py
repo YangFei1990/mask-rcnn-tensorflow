@@ -1,6 +1,6 @@
 # Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-#!/usr/bin/env python
+# !/usr/bin/env python
 # -*- coding: utf-8 -*-
 # File: train.py
 
@@ -17,19 +17,25 @@ import time
 import subprocess
 import os
 
-import tensorpack.utils.viz as tpviz
-from tensorpack import *
-from tensorpack.tfutils.common import get_tf_version_tuple
+import tensorpack_viz as tpviz
+from tensorpack_tfutils import get_tf_version_tuple, get_model_loader
+from tensorpack_utils import fix_rng_seed
+from tensorpack_input_source import QueueInput
+from tensorpack_train import TrainConfig
+from tensorpack_interface import launch_train_with_config
+from tensorpack_callbacks import PeriodicCallback, EnableCallbackIf, ModelSaver,\
+                                 GraphProfiler, PeakMemoryTracker, EstimatedTimeLeft, SessionRunTimeout, \
+                                 MovingAverageSummary, ProgressBar, MergeAllSummaries, RunUpdateOps, ScheduledHyperParamSetter
+import tensorpack_logger as logger
 
 
 from dataset import DetectionDataset
 from config import finalize_configs, config as cfg
 from data import get_eval_dataflow, get_train_dataflow, get_batch_train_dataflow
-from eval import DetectionResult, predict_image, multithread_predict_dataflow, EvalCallback, AsyncEvalCallback
+from eval import DetectionResult, predict_image, multithread_predict_dataflow, EvalCallback
 from viz import draw_annotation, draw_final_outputs, draw_predictions, draw_proposal_recall
 from performance import ThroughputTracker, humanize_float
 from model.generalized_rcnn import ResNetFPNModel
-from tensorpack.utils import fix_rng_seed
 
 
 try:
@@ -65,9 +71,9 @@ def do_visualize(model, model_path, nr_visualize=100, output_dir='output'):
             img, gt_boxes, gt_labels = dp['images'], dp['gt_boxes'], dp['gt_labels']
             orig_shape = img.shape[:2]
             rpn_boxes, rpn_scores, all_scores, \
-                final_boxes, final_scores, final_labels = pred(np.expand_dims(img, axis=0), 
+                final_boxes, final_scores, final_labels = pred(np.expand_dims(img, axis=0),
                                                                np.expand_dims(np.array(img.shape), axis=0),
-                                                               np.expand_dims(gt_boxes, axis=0), 
+                                                               np.expand_dims(gt_boxes, axis=0),
                                                                np.expand_dims(gt_labels, axis=0))
 
             # draw groundtruth boxes
@@ -83,7 +89,7 @@ def do_visualize(model, model_path, nr_visualize=100, output_dir='output'):
                        zip(final_boxes, final_scores, final_labels,
                            [None] * len(final_labels))]
             final_viz = draw_final_outputs(img, results)
-            
+
 
             viz = tpviz.stack_patches([
                 gt_viz, proposal_viz,
@@ -118,8 +124,6 @@ def do_predict(pred_func, input_file):
     cv2.imwrite("output.png", viz)
     logger.info("Inference output written to output.png")
     tpviz.interactive_imshow(viz)
-
-
 
 
 
@@ -172,60 +176,6 @@ def call_only_once(func):
         return func(*args, **kwargs)
 
     return wrapper
-
-class AsyncHorovodTrainer(HorovodTrainer):
-    '''
-    A wrapper of the HorovodTrainer, will stop the training once the target accuracy is reached.
-    '''
-    def __init__(self, average=True, compression=None):
-        super(AsyncHorovodTrainer, self).__init__(average=average, compression=compression)
-
-    @call_only_once
-    def main_loop(self, steps_per_epoch, starting_epoch, max_epoch):
-        """
-        Run the main training loop.
-
-        Args:
-            steps_per_epoch, starting_epoch, max_epoch (int):
-        """
-        with self.sess.as_default():
-            self.loop.config(steps_per_epoch, starting_epoch, max_epoch)
-            self.loop.update_global_step()
-            try:
-                self._callbacks.before_train()
-                # refresh global step (might have changed by callbacks) TODO ugly
-                # what if gs is changed later?
-                self.loop.update_global_step()
-                for self.loop._epoch_num in range(
-                        self.loop.starting_epoch, self.loop.max_epoch + 1):
-                    logger.info("Start Epoch {} ...".format(self.loop.epoch_num))
-                    self._callbacks.before_epoch()
-                    start_time = time.time()
-                    for self.loop._local_step in range(self.loop.steps_per_epoch):
-                        if self.hooked_sess.should_stop():
-                            return
-                        if cfg.TRAIN.SHOULD_STOP:
-                            logger.info("Target accuracy has been reached, stop.....")
-                            return
-                        self.run_step()  # implemented by subclass
-                        self._callbacks.trigger_step()
-                    self._callbacks.after_epoch()
-                    logger.info("Epoch {} (global_step {}) finished, time:{}.".format(
-                        self.loop.epoch_num, self.loop.global_step, humanize_time_delta(time.time() - start_time)))
-
-                    # trigger epoch outside the timing region.
-                    self._callbacks.trigger_epoch()
-                logger.info("Training has finished!")
-            except (StopTraining, tf.errors.OutOfRangeError) as e:
-                logger.info("Training was stopped by exception {}.".format(str(e)))
-            except KeyboardInterrupt:
-                logger.info("Detected Ctrl-C and exiting main loop.")
-                raise
-            finally:
-                self._callbacks.after_train()
-                self.hooked_sess.close()
-
-
 
 
 if __name__ == '__main__':
@@ -293,8 +243,6 @@ if __name__ == '__main__':
             elif args.evaluate:
                 assert args.evaluate.endswith('.json'), args.evaluate
                 do_evaluate(predcfg, args.evaluate)
-
-
 
     else:
 
@@ -370,19 +318,11 @@ if __name__ == '__main__':
             SessionRunTimeout(60000).set_chief_only(True),   # 1 minute timeout
         ]
 
-        if args.async_eval:
-            callbacks.extend([
-                AsyncEvalCallback(dataset, *MODEL.get_inference_tensor_names(), args.logdir, 1) #cfg.TRAIN.BATCH_SIZE_PER_GPU)
-                for dataset in cfg.DATA.VAL
-            ])
-        else:
-            callbacks.extend([
-                EvalCallback(dataset, *MODEL.get_inference_tensor_names(), args.logdir, 1) #cfg.TRAIN.BATCH_SIZE_PER_GPU)
-                for dataset in cfg.DATA.VAL
-            ])
+        callbacks.extend([
+            EvalCallback(dataset, *MODEL.get_inference_tensor_names(), args.logdir, 1, async=args.async_eval) #cfg.TRAIN.BATCH_SIZE_PER_GPU)
+            for dataset in cfg.DATA.VAL
+        ])
 
-        if not is_horovod:
-            callbacks.append(GPUUtilizationTracker())
 
         callbacks.append(ThroughputTracker(cfg.TRAIN.BATCH_SIZE_PER_GPU*cfg.TRAIN.NUM_GPUS,
                                            args.images_per_epoch,
@@ -422,14 +362,7 @@ if __name__ == '__main__':
             starting_epoch=cfg.TRAIN.STARTING_EPOCH
         )
 
-        if args.async_eval:
-            trainer = AsyncHorovodTrainer(average=True)
-        elif is_horovod:
-            trainer = HorovodTrainer(average=True)
-        else:
-            # nccl mode appears faster than cpu mode
-            trainer = SyncMultiGPUTrainerReplicated(cfg.TRAIN.NUM_GPUS, average=True, mode='nccl')
-        launch_train_with_config(traincfg, trainer)
+        launch_train_with_config(traincfg)
 
     training_duration_secs = time.time() - start_time
     logger.info(f'Total duration: {humanize_float(training_duration_secs)}')

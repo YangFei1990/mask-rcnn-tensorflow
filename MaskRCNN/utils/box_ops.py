@@ -5,7 +5,7 @@
 
 import tensorflow as tf
 
-from tensorpack.tfutils.scope_utils import under_name_scope
+from tensorpack_tfutils import under_name_scope
 
 
 """
