@@ -8,7 +8,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # add mask-rcnn packages
 RUN apt-get update && \
     apt-get install -y libsm6 libxext6 libxrender-dev awscli && \
-    pip install opencv-python=4.1.1.26
+    pip install opencv-python==4.1.1.26
 
 RUN pip uninstall -y pycocotools && \
     pip install pybind11 && \
