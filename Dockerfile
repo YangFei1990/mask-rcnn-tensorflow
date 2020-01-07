@@ -35,6 +35,14 @@ RUN pip uninstall -y numpy
 
 RUN pip install --ignore-installed numpy==1.16.2
 
+RUN pip install six && \
+    pip install termcolor && \
+    pip install tabulate && \
+    pip install tqdm && \
+    pip install msgpack && \
+    pip install msgpack-numpy && \
+    pip install pyzmq
+
 WORKDIR /
 
 RUN apt update && \
