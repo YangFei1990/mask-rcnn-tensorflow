@@ -13,10 +13,10 @@ RUN apt-get update && \
 RUN pip uninstall -y pycocotools && \
     pip install pybind11 && \
     pip install scikit-image
-    
+
 RUN wget https://github.com/aws-samples/mask-rcnn-tensorflow/releases/download/v0.0.0/example_log.tar.gz && \
     tar -xzf example_log.tar.gz example_log
-    
+
 
 # add custom nvidia coco tools
 # need to be modified for pybind11 header files
@@ -36,12 +36,6 @@ RUN pip uninstall -y numpy
 RUN pip install --ignore-installed numpy==1.16.2
 
 WORKDIR /
-
-# clone repo for mask r-cnn scripts and demos
-RUN git clone https://github.com/aws-samples/mask-rcnn-tensorflow.git
-
-RUN chmod -R +w /mask-rcnn-tensorflow
-RUN pip install --ignore-installed -e /mask-rcnn-tensorflow/
 
 RUN apt update && \
     apt upgrade -y && \
