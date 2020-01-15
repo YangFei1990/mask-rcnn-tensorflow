@@ -45,6 +45,8 @@ RUN pip install six && \
 
 WORKDIR /
 
+COPY ./ /mask-rcnn-tensorflow/
+
 RUN apt update && \
     apt upgrade -y && \
     apt install -y openssh-server

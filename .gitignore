@@ -93,3 +93,4 @@ target/
 *.dat
 
 .idea/
+awspip_scripts/
